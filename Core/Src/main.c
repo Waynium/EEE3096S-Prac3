@@ -8,10 +8,8 @@ In this practical you will learn to use the ADC on the STM32 using the HAL.
 Here, we will be measuring the voltage on a potentiometer and using its value
 to adjust the brightness of the on board LEDs. We set up an interrupt to switch the
 display between the blue and green LEDs.
-
 Code is also provided to send data from the STM32 to other devices using UART protocol
 by using HAL. You will need Putty or a Python script to read from the serial port on your PC.
-
 UART Connections are as follows: 5V->5V GND->GND RXD->PA2 TXD->PA3(unused).
 Open device manager and go to Ports. Plug in the USB connector with the STM powered on.
 Check the port number (COMx). Open up Putty and create a new Serial session on that COMx
@@ -51,7 +49,8 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
-char buffer[10];
+char buffer[32];
+int period = 500;
 
 //TO DO:
 //TASK 1
@@ -127,18 +126,28 @@ int main(void)
 	  //TASK 2
 	  //Test your pollADC function and display via UART
 	  uint32_t result = pollADC();
-	  sprintf(buffer, "%d \r\n", result);
-	  if (HAL_UART_Transmit(&huart2, buffer, sizeof(buffer), 1000) != HAL_OK)
-		  Error_Handler();
+	  sprintf(buffer, " ADC value: %d \r\n", result);
+	  HAL_UART_Transmit(&huart2, buffer, sizeof(buffer), 1000);
 
 	  //TASK 3
 	  //Test your ADCtoCRR function. Display CRR value via UART
-
+	  uint32_t result2 = ADCtoCRR(result);
+	  sprintf(buffer, " PWM value: %d \r\n", result2);
+	  HAL_UART_Transmit(&huart2, buffer, sizeof(buffer), 1000);
 
 	  //TASK 4
 	  //Complete rest of implementation
+	  int dutyCycle = result2*100;
+	  sprintf(buffer, " Duty Cycle: %d%s \r\n", (dutyCycle/47999), "%");
+	  HAL_UART_Transmit(&huart2, buffer, sizeof(buffer), 1000);
 
-	  HAL_Delay (500); // wait for 500 ms
+	  sprintf(buffer, "%s \r\n", "+--------------+");
+	  HAL_UART_Transmit(&huart2, buffer, sizeof(buffer), 1000);
+	  HAL_Delay(period);
+
+
+
+	  //HAL_Delay (500); // wait for 500 ms
 
     /* USER CODE END WHILE */
 
@@ -406,14 +415,14 @@ void EXTI0_1_IRQHandler(void)
 	//TASK 1
 	//Switch delay frequency
 	// Changing the delay modulates the duty cycle of the pulse
-	int period = HAL_GetTick();
+	//int period = HAL_GetTick();
 	if (period == 500) {
 		period = 1000;
 	}
 	else {
 		period = 500;
 	}
-	HAL_Delay(period);
+	//HAL_Delay(period);
 	HAL_GPIO_EXTI_IRQHandler(B1_Pin); // Clear interrupt flags
 }
 
@@ -423,11 +432,11 @@ uint32_t pollADC(void){
 	// Complete the function body
 	HAL_ADC_Start(&hadc); // start the adc
 
-	HAL_ADC_PollForConversion(&hadc, 100); // poll for conversion
+	HAL_ADC_PollForConversion(&hadc, HAL_MAX_DELAY); // poll for conversion
 
 	uint32_t val = HAL_ADC_GetValue(&hadc); // get the adc value
 
-	HAL_ADC_Stop(&hadc1); // stop adc
+	HAL_ADC_Stop(&hadc); // stop adc
 
 	return val;
 }
@@ -440,8 +449,9 @@ uint32_t ADCtoCRR(uint32_t adc_val){
 	//HINT: The ADC range is approx 0 - 4095
 	//HINT: Scale number from 0-4096 to 0 - 47999
 	//uint32_t ccr_val = adc_val/ARR;
-	__HAL_TIM_SetCompare(htim3, TIM_CHANNEL_4, ccr_val);
-	return val;
+	uint32_t ccr_val = adc_val * (47999/4096);
+	__HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_4, ccr_val);
+	return ccr_val;
 }
 
 /* USER CODE END 4 */
